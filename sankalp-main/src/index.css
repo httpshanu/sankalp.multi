@@ -1,0 +1,78 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --primary: #0F4C75;
+    --primary-light: #1B6CA8;
+    --primary-dark: #0a3254;
+    --accent: #0D9488;
+    --accent-light: #14b8a6;
+    --warning: #F59E0B;
+    --danger: #F43F5E;
+    --success: #10B981;
+    --bg: #F0F4F8;
+    --card: #ffffff;
+    --sidebar: #0F4C75;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background-color: var(--bg);
+    color: #1e293b;
+    margin: 0;
+    padding: 0;
+    font-size: 16.5px;
+    line-height: 1.6;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1 { font-size: 1.65rem; font-weight: 700; line-height: 1.25; }
+  h2 { font-size: 1.4rem; font-weight: 650; line-height: 1.3; }
+  h3 { font-size: 1.18rem; font-weight: 650; line-height: 1.35; }
+  h4 { font-size: 1.05rem; font-weight: 600; line-height: 1.4; }
+
+  td, th { font-size: 0.95rem; }
+
+  p, span, label, li, a, button {
+    font-size: inherit;
+  }
+
+  input, select, textarea {
+    outline: none;
+    font-size: 1rem;
+  }
+
+  button, input, select, textarea {
+    font: inherit;
+  }
+
+  button {
+    cursor: pointer;
+  }
+}
+
+@layer utilities {
+  .text-\[9px\] { font-size: 0.68rem; line-height: 1rem; }
+  .text-\[10px\] { font-size: 0.74rem; line-height: 1rem; }
+  .text-xs { font-size: 0.82rem; line-height: 1.25rem; }
+  .text-sm { font-size: 0.96rem; line-height: 1.45rem; }
+  .text-base { font-size: 1rem; line-height: 1.55rem; }
+  .text-lg { font-size: 1.15rem; line-height: 1.65rem; }
+  .text-xl { font-size: 1.35rem; line-height: 1.8rem; }
+  .text-2xl { font-size: 1.65rem; line-height: 2rem; }
+  .text-3xl { font-size: 2rem; line-height: 2.35rem; }
+  .text-4xl { font-size: 2.45rem; line-height: 2.9rem; }
+
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}
