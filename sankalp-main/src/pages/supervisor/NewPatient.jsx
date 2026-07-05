@@ -1,34 +1,48 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect, Fragment } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import AppLayout from '../../components/layout/AppLayout';
+import { useAuth } from '../../context/useAuth';
 import { useLanguage } from '../../context/useLanguage';
-import { CheckCircle2, ChevronRight, ChevronLeft, Save, Send } from 'lucide-react';
+import {
+  upsertPatient, getPatientById, getBabiesByPatient, upsertBaby,
+  generateBabyId, classifyBaby, isKmcEligible, generateFollowups,
+  addAuditLog, getFacilityCode
+} from '../../data/dataStore';
+import { UTTARAKHAND_DISTRICTS, HARIDWAR_BLOCKS, FACILITY_LIST } from '../../data/dataStore';
+import { SectionA, SectionB, SectionC, SectionD, SectionE, SectionF, SectionG, SectionH, SectionI, SectionJ } from '../../components/Assessment';
+import KmcSection from '../../components/Assessment/KmcSection';
+import { CheckCircle2, ChevronRight, ChevronLeft, Save, Send, Baby, Plus, Trash2 } from 'lucide-react';
+
+function generateId() {
+  return 'SN-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4);
+}
 
 const STEPS = [
-  { id: 1, key: 'identification' },
-  { id: 2, key: 'ancCounselling' },
-  { id: 3, key: 'afterBirthCare' },
+  { id: 1, key: 'registration', section: 'A' },
+  { id: 2, key: 'ancCounselling', section: 'B' },
+  { id: 3, key: 'afterBirthCare', section: 'C' },
   { id: 4, key: 'breastfeedingCounselling' },
-  { id: 5, key: 'bfAssessment' },
-  { id: 6, key: 'postnatalWard' },
-  { id: 7, key: 'sickBaby' },
-  { id: 8, key: 'dailyMonitoring' },
-  { id: 9, key: 'bfProblems' },
-  { id: 10, key: 'dischargeTitle' },
+  { id: 5, key: 'bfAssessment', section: 'D' },
+  { id: 6, key: 'postnatalWard', section: 'E' },
+  { id: 7, key: 'sickBaby', section: 'F' },
+  { id: 8, key: 'dailyMonitoring', section: 'G' },
+  { id: 9, key: 'bfProblems', section: 'H' },
+  { id: 10, key: 'beforeDischarge', section: 'I' },
+  { id: 11, key: 'postDischargePlan', section: 'J' },
 ];
 
 function StepIndicator({ current, t }) {
   return (
     <div className="flex items-center justify-between mb-6 overflow-x-auto pb-2">
       {STEPS.map((step, i) => (
-        <div key={step.id} className="flex items-center flex-shrink-0">
-          <div className="flex flex-col items-center">
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold border-2 transition-all ${
+        <Fragment key={step.id}>
+          <div className="flex items-center flex-shrink-0">
+            <div className={`flex flex-col items-center w-8 h-8 rounded-full flex-items-center justify-center text-sm font-bold border-2 transition-all ${
               step.id < current ? 'bg-emerald-500 border-emerald-500 text-white'
-              : step.id === current ? 'bg-[#0F4C75] border-[#0F4C75] text-white'
-              : 'bg-white border-slate-200 text-slate-400'
+                : step.id === current ? 'bg-[#0F4C75] border-[#0F4C75] text-white'
+                : 'bg-white border-slate-200 text-slate-400'
             }`}>
-              {step.id < current ? <CheckCircle2 size={14} /> : step.id}
+              {step.id < current ? <CheckCircle2 size={14} /> : step.section || step.id}
             </div>
             <p className={`text-xs mt-1 font-medium whitespace-nowrap ${step.id === current ? 'text-[#0F4C75]' : 'text-slate-400'}`}>
               {t(step.key)}
@@ -37,250 +51,23 @@ function StepIndicator({ current, t }) {
           {i < STEPS.length - 1 && (
             <div className={`w-8 h-0.5 mx-1 mb-4 ${step.id < current ? 'bg-emerald-400' : 'bg-slate-200'}`} />
           )}
-        </div>
+        </Fragment>
       ))}
     </div>
   );
 }
 
-function CheckItem({ label, checked, onChange }) {
-  return (
-    <label className="flex items-center justify-between py-2 border-b border-slate-50 cursor-pointer">
-      <span className="text-sm text-slate-700">{label}</span>
-      <div className="flex gap-3">
-        {['yes', 'no'].map(v => (
-          <button key={v} type="button" onClick={() => onChange(v === 'yes')}
-            className={`px-3 py-1 rounded-lg text-xs font-semibold border transition-all ${
-              (v === 'yes' && checked === true) || (v === 'no' && checked === false)
-                ? v === 'yes' ? 'bg-emerald-100 text-emerald-700 border-emerald-300' : 'bg-rose-100 text-rose-700 border-rose-300'
-                : 'bg-white text-slate-400 border-slate-200'
-            }`}>
-            {v === 'yes' ? 'Yes' : 'No'}
-          </button>
-        ))}
-      </div>
-    </label>
-  );
-}
-
-// Step 1: Section A - Identification
-function IdentificationForm({ data, onChange, t }) {
-  const fields = [
-    { key: 'motherName', label: t('motherFullName'), placeholder: 'e.g. Sunita Devi', span: 2 },
-    { key: 'fatherName', label: t('fatherFullName'), placeholder: 'e.g. Ramesh Kumar', span: 2 },
-    { key: 'age', label: t('ageYears'), placeholder: '24', type: 'number', span: 1 },
-    { key: 'contact', label: t('contactNumber'), placeholder: '+91 9876543210', span: 1 },
-    { key: 'village', label: t('villageArea'), placeholder: 'Village name', span: 2 },
-    { key: 'ashaName', label: t('ashaWorkerName'), placeholder: 'Assigned worker', span: 1 },
-    { key: 'ashaContact', label: t('ashaContact'), placeholder: '+91', span: 1 },
-  ];
-  return (
-    <div>
-      <h3 className="text-lg font-bold text-slate-800 mb-1">👩 {t('motherDetails')}</h3>
-      <p className="text-slate-500 text-sm mb-5">{t('enterMotherInfo')}</p>
-      <div className="grid grid-cols-2 gap-4">
-        {fields.map(f => (
-          <div key={f.key} className={f.span === 2 ? 'col-span-2' : ''}>
-            <label className="block text-sm font-medium text-slate-700 mb-1">{f.label}</label>
-            <input type={f.type || 'text'} value={data[f.key] || ''} onChange={e => onChange({ ...data, [f.key]: e.target.value })} placeholder={f.placeholder} className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" />
-          </div>
-        ))}
-      </div>
-
-      <h3 className="text-lg font-bold text-slate-800 mt-6 mb-1">👶 {t('babyDetails')}</h3>
-      <p className="text-slate-500 text-sm mb-5">{t('enterBabyInfo')}</p>
-      <div className="grid grid-cols-2 gap-4">
-        <div className="col-span-2">
-          <label className="block text-sm font-medium text-slate-700 mb-2">{t('gender')}</label>
-          <div className="flex gap-4">
-            {['male', 'female', 'other'].map(g => (
-              <label key={g} className="flex items-center gap-2 cursor-pointer">
-                <input type="radio" name="gender" value={g} checked={data.gender === g} onChange={() => onChange({ ...data, gender: g })} />
-                <span className="text-sm capitalize text-slate-700">{g}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-        <div className="col-span-2">
-          <label className="block text-sm font-medium text-slate-700 mb-1">{t('uhidLabel')}</label>
-          <input value={data.uhid || ''} onChange={e => onChange({ ...data, uhid: e.target.value })} placeholder="UHID-XXXX-XXXX" className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-2">{t('areaType')}</label>
-          <div className="flex gap-4">
-            {['rural', 'urban'].map(a => (
-              <label key={a} className="flex items-center gap-2 cursor-pointer">
-                <input type="radio" name="area" value={a} checked={data.area === a} onChange={() => onChange({ ...data, area: a })} />
-                <span className="text-sm capitalize text-slate-700">{a}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">{t('birthWeight')} (g)</label>
-          <input type="number" value={data.birthWeightG || ''} onChange={e => onChange({ ...data, birthWeightG: e.target.value })} placeholder="e.g. 2450" className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">{t('gestationalAge')} (weeks)</label>
-          <input type="number" value={data.gestationalAge || ''} onChange={e => onChange({ ...data, gestationalAge: e.target.value })} placeholder="28–42" className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" />
-        </div>
-        <div className="col-span-2">
-          <label className="block text-sm font-medium text-slate-700 mb-2">{t('deliveryType')}</label>
-          <div className="flex gap-4">
-            {[{ key: 'normal', label: t('normal') }, { key: 'assisted', label: t('assisted') }, { key: 'caesarean', label: t('caesarean') }].map(d => (
-              <label key={d.key} className="flex items-center gap-2 cursor-pointer">
-                <input type="radio" name="deliveryType" value={d.key} checked={data.deliveryType === d.key} onChange={() => onChange({ ...data, deliveryType: d.key })} />
-                <span className="text-sm text-slate-700">{d.label}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">{t('gravida')}</label>
-          <input type="number" value={data.gravida || ''} onChange={e => onChange({ ...data, gravida: e.target.value })} placeholder="G1, G2..." className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">{t('para')}</label>
-          <input type="number" value={data.para || ''} onChange={e => onChange({ ...data, para: e.target.value })} placeholder="P0, P1..." className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Step 2: Section B - ANC Counselling
-function ANCForm({ data, onChange, t }) {
-  const counsellingItems = [
-    { key: 'importanceBF', label: t('importanceBF') },
-    { key: 'colostrum', label: t('colostrumFeeding') },
-    { key: 'bfWithin1Hour', label: t('bfWithin1Hour') },
-    { key: 'exclusiveBF6Months', label: t('exclusiveBF6Months') },
-    { key: 'skinToSkin', label: t('skinToSkin') },
-    { key: 'noPrelacteal', label: t('noPrelacteal') },
-  ];
-  const breastItems = [
-    { key: 'flatNipple', label: t('flatNipple') },
-    { key: 'invertedNipple', label: t('invertedNipple') },
-    { key: 'breastAbnormality', label: t('breastAbnormality') },
-    { key: 'prevBFDifficulty', label: t('prevBFDifficulty') },
-  ];
-  return (
-    <div>
-      <h3 className="text-lg font-bold text-slate-800 mb-1">🤰 {t('ancCounselling')}</h3>
-      <p className="text-slate-500 text-sm mb-5">{t('ancCounsellingDesc')}</p>
-      <div className="space-y-0">
-        {counsellingItems.map(item => (
-          <CheckItem key={item.key} label={item.label} checked={data[item.key]} onChange={v => onChange({ ...data, [item.key]: v })} />
-        ))}
-      </div>
-
-      <h3 className="text-lg font-bold text-slate-800 mt-6 mb-1">🔍 {t('breastAssessment')}</h3>
-      <div className="space-y-0">
-        {breastItems.map(item => (
-          <CheckItem key={item.key} label={item.label} checked={data[item.key]} onChange={v => onChange({ ...data, [item.key]: v })} />
-        ))}
-      </div>
-      <div className="mt-4">
-        <label className="block text-sm font-medium text-slate-700 mb-1">{t('actionTaken')}</label>
-        <textarea rows={2} value={data.ancAction || ''} onChange={e => onChange({ ...data, ancAction: e.target.value })} placeholder="..." className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 resize-none" />
-      </div>
-    </div>
-  );
-}
-
-// Step 3: Section C - After Birth
-function AfterBirthForm({ data, onChange, t }) {
-  const immediateCare = [
-    { key: 'driedImmediately', label: t('driedImmediately') },
-    { key: 'delayedCordClamping', label: t('delayedCordClamping') },
-    { key: 'skinToSkinInitiated', label: t('skinToSkinInitiated') },
-    { key: 'durationOver1Hour', label: t('durationOver1Hour') },
-    { key: 'babySeparated', label: t('babySeparated') },
-  ];
-  const whyNoBF = ['motherSick', 'babySick', 'caesarean', 'staffDelay', 'familyRefusal'];
-  return (
-    <div>
-      <h3 className="text-lg font-bold text-slate-800 mb-1">🏥 {t('afterBirthCare')}</h3>
-      <p className="text-slate-500 text-sm mb-5">{t('afterBirthCareDesc')}</p>
-
-      <div className="grid grid-cols-2 gap-4 mb-4">
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">{t('timeOfBirth')}</label>
-          <input type="time" value={data.timeOfBirth || ''} onChange={e => onChange({ ...data, timeOfBirth: e.target.value })} className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">{t('timeBFStarted')}</label>
-          <input type="time" value={data.timeBFStarted || ''} onChange={e => onChange({ ...data, timeBFStarted: e.target.value })} className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
-        </div>
-      </div>
-
-      <div className="space-y-0 mb-5">
-        <CheckItem label={t('babyCriedImmediately')} checked={data.babyCried} onChange={v => onChange({ ...data, babyCried: v })} />
-        <CheckItem label={t('requiredResuscitation')} checked={data.resuscitation} onChange={v => onChange({ ...data, resuscitation: v })} />
-        <CheckItem label={t('withinOneHour')} checked={data.withinOneHour} onChange={v => onChange({ ...data, withinOneHour: v })} />
-      </div>
-
-      <h4 className="font-semibold text-slate-700 mb-2">{t('immediateNewbornCare')}</h4>
-      <div className="space-y-0 mb-5">
-        {immediateCare.map(item => (
-          <CheckItem key={item.key} label={item.label} checked={data[item.key]} onChange={v => onChange({ ...data, [item.key]: v })} />
-        ))}
-      </div>
-
-      {data.babySeparated && (
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-slate-700 mb-1">{t('reason')}</label>
-          <input value={data.separationReason || ''} onChange={e => onChange({ ...data, separationReason: e.target.value })} className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
-        </div>
-      )}
-
-      {!data.withinOneHour && (
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-slate-700 mb-2">{t('ifNoWhy')}</label>
-          <div className="flex flex-wrap gap-2">
-            {whyNoBF.map(k => (
-              <button key={k} type="button" onClick={() => onChange({ ...data, whyNoBF: k })}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${data.whyNoBF === k ? 'bg-amber-100 text-amber-700 border-amber-300' : 'bg-white text-slate-500 border-slate-200'}`}>
-                {t(k)}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <div className="space-y-0">
-        <CheckItem label={t('colostrumGiven')} checked={data.colostrumGiven} onChange={v => onChange({ ...data, colostrumGiven: v })} />
-        <CheckItem label={t('prelactealGiven')} checked={data.prelactealGiven} onChange={v => onChange({ ...data, prelactealGiven: v })} />
-      </div>
-      {data.prelactealGiven && (
-        <div className="mt-2 mb-4">
-          <label className="block text-sm font-medium text-slate-700 mb-2">{t('type')}</label>
-          <div className="flex flex-wrap gap-2">
-            {['honey', 'water', 'formula', 'animalMilk'].map(k => (
-              <button key={k} type="button" onClick={() => onChange({ ...data, prelactealType: k })}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${data.prelactealType === k ? 'bg-amber-100 text-amber-700 border-amber-300' : 'bg-white text-slate-500 border-slate-200'}`}>
-                {t(k)}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// Step 4: Breastfeeding Counselling
 function BreastfeedingForm({ data, onChange, t }) {
   const items = [
-    { key: 'colostrumCounselled', label: t('colostrumFeeding'), desc: t('colostrumDesc') },
-    { key: 'earlyInitiation', label: t('earlyInitiation'), desc: t('earlyInitiationDesc') },
-    { key: 'exclusiveBreastfeeding', label: t('exclusiveBreastfeeding'), desc: t('exclusiveDesc') },
-    { key: 'latching', label: t('correctLatching'), desc: t('latchingDesc') },
-    { key: 'prelactealFeed', label: t('prelactealFeed'), desc: t('prelactealDesc') },
+    { key: 'colostrumCounselled', label: t('colostrumFeeding') },
+    { key: 'earlyInitiation', label: t('earlyInitiation') },
+    { key: 'exclusiveBreastfeeding', label: t('exclusiveBreastfeeding') },
+    { key: 'latching', label: t('correctLatching') },
+    { key: 'prelactealFeed', label: t('prelactealFeed') },
   ];
   return (
     <div>
-      <h3 className="text-lg font-bold text-slate-800 mb-1">🤱 {t('breastfeedingCounselling')}</h3>
+      <h3 className="text-lg font-bold text-slate-800 mb-1">{t('breastfeedingCounselling')}</h3>
       <p className="text-slate-500 text-sm mb-5">{t('checkTopics')}</p>
       <div className="space-y-3">
         {items.map(item => (
@@ -289,253 +76,57 @@ function BreastfeedingForm({ data, onChange, t }) {
             <div className={`w-5 h-5 rounded flex items-center justify-center border-2 flex-shrink-0 transition-all ${data[item.key] ? 'bg-[#0F4C75] border-[#0F4C75]' : 'border-slate-300'}`}>
               {data[item.key] && <CheckCircle2 size={12} className="text-white" />}
             </div>
-            <div>
-              <p className="text-sm font-semibold text-slate-800">{item.label}</p>
-              <p className="text-xs text-slate-500">{item.desc}</p>
-            </div>
+            <span className="text-sm font-semibold text-slate-800">{item.label}</span>
           </div>
         ))}
       </div>
-      <div className="mt-4">
-        <label className="block text-sm font-medium text-slate-700 mb-1">{t('additionalNotes')}</label>
-        <textarea rows={3} value={data.notes || ''} onChange={e => onChange({ ...data, notes: e.target.value })} placeholder={t('counsellingNotes')} className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 resize-none" />
-      </div>
     </div>
   );
 }
 
-// Step 5: Section D - Breastfeeding Assessment
-function BFAssessmentForm({ data, onChange, t }) {
-  const positionItems = ['motherComfortable', 'babyCloseToMother', 'babyFacingBreast', 'wholeBodySupported'];
-  const attachmentItems = ['mouthWideOpen', 'chinTouchingBreast', 'lowerLipOutward', 'moreAreolaAbove'];
-  const sucklingItems = ['slowDeepSuck', 'swallowingHeard', 'babySatisfied'];
+function BabyRegistrationForm({ baby, index, totalBabies, onUpdate, onRemove, t }) {
+  const classification = classifyBaby(baby.gestational_age, baby.birth_weight);
   return (
-    <div>
-      <h3 className="text-lg font-bold text-slate-800 mb-1">🍼 {t('bfAssessment')}</h3>
-      <p className="text-slate-500 text-sm mb-5">{t('bfAssessmentDesc')}</p>
-
-      <h4 className="font-semibold text-slate-700 mb-2">{t('position')}</h4>
-      <div className="space-y-0 mb-5">
-        {positionItems.map(k => (
-          <CheckItem key={k} label={t(k)} checked={data[k]} onChange={v => onChange({ ...data, [k]: v })} />
-        ))}
+    <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
+      <div className="flex items-center justify-between mb-3">
+        <h4 className="font-semibold text-slate-700 flex items-center gap-2">
+          <Baby size={16} className="text-[#0F4C75]" /> {t('baby')} {index + 1}
+          {baby.baby_id && <span className="text-xs font-mono text-slate-400 ml-2">{baby.baby_id}</span>}
+        </h4>
+        {totalBabies > 1 && (
+          <button onClick={() => onRemove(index)} className="p-1 text-rose-400 hover:text-rose-600"><Trash2 size={14} /></button>
+        )}
       </div>
-
-      <h4 className="font-semibold text-slate-700 mb-2">{t('attachment')}</h4>
-      <div className="space-y-0 mb-5">
-        {attachmentItems.map(k => (
-          <CheckItem key={k} label={t(k)} checked={data[k]} onChange={v => onChange({ ...data, [k]: v })} />
-        ))}
-      </div>
-
-      <h4 className="font-semibold text-slate-700 mb-2">{t('effectiveSuckling')}</h4>
-      <div className="space-y-0 mb-5">
-        {sucklingItems.map(k => (
-          <CheckItem key={k} label={t(k)} checked={data[k]} onChange={v => onChange({ ...data, [k]: v })} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// Step 6: Section E - Postnatal Ward
-function PostnatalForm({ data, onChange, t }) {
-  const nurseObsOptions = ['everyFeed', 'onceDaily', 'never'];
-  const counselItems = ['position', 'attachment', 'feedingCues', 'demandFeeding', 'nightFeeding', 'burping', 'handExpression'];
-  return (
-    <div>
-      <h3 className="text-lg font-bold text-slate-800 mb-1">🏥 {t('postnatalWard')}</h3>
-      <p className="text-slate-500 text-sm mb-5">{t('bfObservedByNurse')}</p>
-
-      <div className="flex gap-2 mb-5">
-        {nurseObsOptions.map(k => (
-          <button key={k} type="button" onClick={() => onChange({ ...data, nurseObserved: k })}
-            className={`px-4 py-2 rounded-xl text-sm font-semibold border-2 transition-all ${data.nurseObserved === k ? 'bg-[#0F4C75] text-white border-[#0F4C75]' : 'bg-white text-slate-600 border-slate-200'}`}>
-            {t(k)}
-          </button>
-        ))}
-      </div>
-
-      <h4 className="font-semibold text-slate-700 mb-2">{t('motherCounselled')}</h4>
-      <div className="space-y-0 mb-5">
-        {counselItems.map(k => (
-          <CheckItem key={k} label={t(k)} checked={data[k]} onChange={v => onChange({ ...data, [k]: v })} />
-        ))}
-      </div>
-
-      <CheckItem label={t('familyCounselled')} checked={data.familyCounselled} onChange={v => onChange({ ...data, familyCounselled: v })} />
-    </div>
-  );
-}
-
-// Step 7: Section F - Sick Baby / KMC
-function SickBabyForm({ data, onChange, t }) {
-  const expressOptions = ['within6Hours', 'within12Hours', 'over12Hours'];
-  const feedMethods = ['directBF', 'cup', 'spoon', 'tube', 'expressedMilk'];
-  return (
-    <div>
-      <h3 className="text-lg font-bold text-slate-800 mb-1">🏥 {t('sickBaby')}</h3>
-      <p className="text-slate-500 text-sm mb-5">{t('applicable')}</p>
-
-      <CheckItem label={t('applicable')} checked={data.sickBabyApplicable} onChange={v => onChange({ ...data, sickBabyApplicable: v })} />
-
-      {data.sickBabyApplicable && (
-        <div className="mt-4">
-          <h4 className="font-semibold text-slate-700 mb-2">{t('motherExpressingMilk')}</h4>
-          <div className="flex gap-2 mb-4">
-            {expressOptions.map(k => (
-              <button key={k} type="button" onClick={() => onChange({ ...data, expressTiming: k })}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${data.expressTiming === k ? 'bg-blue-100 text-blue-700 border-blue-300' : 'bg-white text-slate-500 border-slate-200'}`}>
-                {t(k)}
-              </button>
-            ))}
-          </div>
-
-          <CheckItem label={t('kmcInitiated')} checked={data.kmcStarted} onChange={v => onChange({ ...data, kmcStarted: v })} />
-
-          <h4 className="font-semibold text-slate-700 mt-4 mb-2">{t('feedingMethod')}</h4>
-          <div className="flex flex-wrap gap-2 mb-4">
-            {feedMethods.map(k => (
-              <button key={k} type="button" onClick={() => onChange({ ...data, feedingMethod: k })}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${data.feedingMethod === k ? 'bg-teal-100 text-teal-700 border-teal-300' : 'bg-white text-slate-500 border-slate-200'}`}>
-                {t(k)}
-              </button>
-            ))}
-          </div>
-
-          <CheckItem label={t('counselledDaily')} checked={data.counselledDaily} onChange={v => onChange({ ...data, counselledDaily: v })} />
-        </div>
-      )}
-    </div>
-  );
-}
-
-// Step 8: Section G - Daily Monitoring
-function DailyMonitoringForm({ data, onChange, t }) {
-  const monitored = ['bfObserved', 'goodAttachment', 'feeding8to12', 'urinationAdequate', 'stoolPassed', 'weightMonitored'];
-  const days = ['day1', 'day2', 'day3'];
-  return (
-    <div>
-      <h3 className="text-lg font-bold text-slate-800 mb-1">📊 {t('dailyMonitoring')}</h3>
-      <p className="text-slate-500 text-sm mb-5">Day 1–3 monitoring checklist</p>
-
-      <div className="overflow-x-auto">
-        <table className="w-full border-collapse">
-          <thead>
-            <tr className="bg-slate-50">
-              <th className="text-left text-xs font-semibold text-slate-400 uppercase px-4 py-3 border border-slate-200">Observation</th>
-              {days.map(d => (
-                <th key={d} className="text-center text-xs font-semibold text-slate-400 uppercase px-4 py-3 border border-slate-200">{t(d)}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {monitored.map(k => (
-              <tr key={k} className="hover:bg-slate-50">
-                <td className="px-4 py-3 text-sm text-slate-700 border border-slate-200">{t(k)}</td>
-                {days.map(d => (
-                  <td key={d} className="text-center border border-slate-200">
-                    <button type="button" onClick={() => {
-                      const current = data.dailyMonitoring?.[k]?.[d];
-                      const newVal = current === true ? false : current === false ? undefined : true;
-                      onChange({ ...data, dailyMonitoring: { ...data.dailyMonitoring, [k]: { ...data.dailyMonitoring?.[k], [d]: newVal } } });
-                    }} className={`w-8 h-8 rounded-lg inline-flex items-center justify-center text-sm font-bold transition-all ${
-                      data.dailyMonitoring?.[k]?.[d] === true ? 'bg-emerald-500 text-white' :
-                      data.dailyMonitoring?.[k]?.[d] === false ? 'bg-rose-100 text-rose-600' :
-                      'bg-white text-slate-300 border border-slate-200 hover:border-slate-300'
-                    }`}>
-                      {data.dailyMonitoring?.[k]?.[d] === true ? '✓' : data.dailyMonitoring?.[k]?.[d] === false ? '✗' : '—'}
-                    </button>
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
-// Step 9: Section H - Breastfeeding Problems
-function BFProblemsForm({ data, onChange, t }) {
-  const problems = ['poorAttachment', 'breastEngorgement', 'crackedNipple', 'flatNipple', 'inadequateMilk', 'babySleepy'];
-  return (
-    <div>
-      <h3 className="text-lg font-bold text-slate-800 mb-1">⚠️ {t('bfProblems')}</h3>
-      <p className="text-slate-500 text-sm mb-5">{t('bfProblems')}</p>
-
-      <div className="space-y-0 mb-5">
-        {problems.map(k => (
-          <CheckItem key={k} label={t(k)} checked={data[k]} onChange={v => onChange({ ...data, [k]: v })} />
-        ))}
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-slate-700 mb-1">{t('managementGiven')}</label>
-        <textarea rows={3} value={data.bfManagement || ''} onChange={e => onChange({ ...data, bfManagement: e.target.value })} placeholder="Management details..." className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 resize-none" />
-      </div>
-    </div>
-  );
-}
-
-// Step 10: Sections I & J - Discharge & Follow-up
-function DischargeFollowupForm({ data, onChange, t }) {
-  const dischargeTopics = ['exclusiveBFCounselling', 'dangerSignsCounselling', 'maternalNutrition', 'homeVisitCounselling', 'immunization', 'followupCounselling'];
-  const hbncDays = ['day1', 'day3', 'day7', 'day14', 'day21', 'day28'];
-  return (
-    <div>
-      <h3 className="text-lg font-bold text-slate-800 mb-1">🚨 {t('dischargeTitle')}</h3>
-      <p className="text-slate-500 text-sm mb-5">{t('criticalModule')}</p>
-
-      <div className="grid grid-cols-2 gap-4 mb-5">
+      <div className="grid grid-cols-2 gap-4">
         <div>
-          <CheckItem label={t('exclusivelyBF')} checked={data.exclusivelyBF} onChange={v => onChange({ ...data, exclusivelyBF: v })} />
+          <label className="block text-sm font-medium text-slate-700 mb-1">{t('gender')}</label>
+          <div className="flex gap-3">
+            {['male', 'female'].map(g => (
+              <label key={g} className="flex items-center gap-2 cursor-pointer">
+                <input type="radio" name={`baby_gender_${index}`} value={g} checked={baby.gender === g} onChange={() => onUpdate(index, 'gender', g)} />
+                <span className="text-sm capitalize text-slate-700">{g === 'male' ? t('male') : t('female')}</span>
+              </label>
+            ))}
+          </div>
         </div>
         <div>
-          <CheckItem label={t('motherConfident')} checked={data.motherConfident} onChange={v => onChange({ ...data, motherConfident: v })} />
+          <label className="block text-sm font-medium text-slate-700 mb-1">UHID</label>
+          <input type="text" value={baby.uhid || ''} onChange={e => onUpdate(index, 'uhid', e.target.value)} className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
         </div>
-      </div>
-
-      <h4 className="font-semibold text-slate-700 mb-2">{t('discussedDanger')}</h4>
-      <div className="space-y-0 mb-5">
-        {['inabilityToFeed', 'convulsions', 'fastBreathing', 'fever', 'yellowingOfPalms'].map(k => (
-          <CheckItem key={k} label={t(k)} checked={data[k]} onChange={v => onChange({ ...data, [k]: v })} />
-        ))}
-      </div>
-
-      <h4 className="font-semibold text-slate-700 mb-2">{t('beforeDischarge')}</h4>
-      <div className="space-y-0 mb-5">
-        {dischargeTopics.map(k => (
-          <CheckItem key={k} label={t(k)} checked={data[k]} onChange={v => onChange({ ...data, [k]: v })} />
-        ))}
-      </div>
-
-      <div className="mb-4">
-        <label className="block text-sm font-medium text-slate-700 mb-1">{t('dischargeAdvice')}</label>
-        <textarea rows={3} value={data.dischargeAdvice || ''} onChange={e => onChange({ ...data, dischargeAdvice: e.target.value })} placeholder={t('dischargeInstructions')} className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 resize-none" />
-      </div>
-
-      <hr className="my-5 border-slate-200" />
-
-      <h3 className="text-lg font-bold text-slate-800 mb-1">📋 {t('postDischargePlan')}</h3>
-      <p className="text-slate-500 text-sm mb-5">{t('postDischargeDesc')}</p>
-
-      <CheckItem label={t('ashaInformed')} checked={data.ashaInformed} onChange={v => onChange({ ...data, ashaInformed: v })} />
-
-      <h4 className="font-semibold text-slate-700 mt-4 mb-2">{t('hbncVisitPlanned')}</h4>
-      <div className="flex flex-wrap gap-2">
-        {hbncDays.map(k => (
-          <button key={k} type="button" onClick={() => onChange({ ...data, hbncDay: k })}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${data.hbncDay === k ? 'bg-blue-100 text-blue-700 border-blue-300' : 'bg-white text-slate-500 border-slate-200'}`}>
-            {t(k)}
-          </button>
-        ))}
-      </div>
-
-      <div className="mt-4">
-        <label className="block text-sm font-medium text-slate-700 mb-1">{t('remarks')}</label>
-        <textarea rows={2} value={data.remarks || ''} onChange={e => onChange({ ...data, remarks: e.target.value })} className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 resize-none" />
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">{t('gestationalAgeWeeks')}</label>
+          <input type="number" value={baby.gestational_age || ''} onChange={e => onUpdate(index, 'gestational_age', e.target.value)} placeholder="28-42" className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">{t('birthWeightGrams')}</label>
+          <input type="number" value={baby.birth_weight || ''} onChange={e => onUpdate(index, 'birth_weight', e.target.value)} placeholder="grams" className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
+        </div>
+        {classification && (
+          <div className="col-span-2">
+            <label className="block text-sm font-medium text-slate-700 mb-1">{t('babyClassification')}</label>
+            <span className="px-3 py-1 bg-blue-50 text-blue-700 rounded-lg text-xs font-semibold">{classification}</span>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -544,11 +135,47 @@ function DischargeFollowupForm({ data, onChange, t }) {
 export default function NewPatient() {
   const navigate = useNavigate();
   const { t } = useLanguage();
+  const { user } = useAuth();
+  const { id } = useParams();
   const [step, setStep] = useState(1);
   const [saved, setSaved] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+
   const [formData, setFormData] = useState({
-    identification: { gender: 'female', area: 'rural' },
+    identification: {
+      district: 'Haridwar',
+      block_name: '',
+      facility_type: 'public',
+      facility_name: '',
+      other_facility_name: '',
+      date_of_admission: '',
+      mother_name: '',
+      father_name: '',
+      mother_mobile: '',
+      alternative_mobile: '',
+      verified_mobile: 'motherNumber',
+      contact_verification_status: 'not_verified',
+      village: '',
+      rural_urban: 'rural',
+      asha_name: '',
+      asha_mobile: '',
+      anm_name: '',
+      anm_mobile: '',
+      assessor_name: '',
+      mother_age: '',
+      gravida: '',
+      para: '',
+      lmp: '',
+      isHRP: 'no',
+      hrp_type: '',
+      registration_remarks: '',
+      baby_count: 1,
+      counsellor_id: user?.id,
+      counsellor_name: user?.name,
+      supervisor_id: user?.id,
+      supervisor_name: user?.name,
+    },
     ancCounselling: {},
     afterBirth: {},
     breastfeeding: {},
@@ -558,32 +185,146 @@ export default function NewPatient() {
     dailyMonitoring: {},
     bfProblems: {},
     discharge: {},
+    postDischargePlan: {},
   });
+
+  const [babies, setBabies] = useState([{
+    baby_number: 1,
+    gender: 'male',
+    uhid: '',
+    gestational_age: '',
+    birth_weight: '',
+    outcome_of_delivery: 'live_birth',
+    baby_condition: 'normal',
+    baby_location: 'with_mother',
+  }]);
+
+  useEffect(() => {
+    if (id) {
+      setIsLoading(true);
+      const patient = getPatientById(id);
+      const existingBabies = getBabiesByPatient(id);
+      const savedData = localStorage.getItem(`sankalp_assessment_${id}`);
+
+      if (savedData) {
+        try { setFormData(JSON.parse(savedData)); } catch {}
+      }
+      if (existingBabies.length > 0) {
+        setBabies(existingBabies);
+      }
+      setIsLoading(false);
+    }
+  }, [id]);
 
   const updateSection = (key) => (val) => setFormData(prev => ({ ...prev, [key]: val }));
 
-  const handleDraft = () => { setSaved(true); setTimeout(() => setSaved(false), 2000); };
+  const updateBaby = (index, key, val) => {
+    setBabies(prev => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], [key]: val };
+      return updated;
+    });
+  };
 
-  const handleSubmit = () => { setSubmitted(true); setTimeout(() => navigate('/supervisor'), 2000); };
+  const addBaby = () => {
+    setBabies(prev => [...prev, { baby_number: prev.length + 1, gender: 'male', uhid: '', gestational_age: '', birth_weight: '', outcome_of_delivery: 'live_birth', baby_condition: 'normal', baby_location: 'with_mother' }]);
+    setFormData(prev => ({ ...prev, identification: { ...prev.identification, baby_count: babies.length + 1 } }));
+  };
 
-  const renderStep = () => {
-    switch (step) {
-      case 1: return <IdentificationForm data={formData.identification} onChange={updateSection('identification')} t={t} />;
-      case 2: return <ANCForm data={formData.ancCounselling} onChange={updateSection('ancCounselling')} t={t} />;
-      case 3: return <AfterBirthForm data={formData.afterBirth} onChange={updateSection('afterBirth')} t={t} />;
-      case 4: return <BreastfeedingForm data={formData.breastfeeding} onChange={updateSection('breastfeeding')} t={t} />;
-      case 5: return <BFAssessmentForm data={formData.bfAssessment} onChange={updateSection('bfAssessment')} t={t} />;
-      case 6: return <PostnatalForm data={formData.postnatalWard} onChange={updateSection('postnatalWard')} t={t} />;
-      case 7: return <SickBabyForm data={formData.sickBaby} onChange={updateSection('sickBaby')} t={t} />;
-      case 8: return <DailyMonitoringForm data={formData.dailyMonitoring} onChange={updateSection('dailyMonitoring')} t={t} />;
-      case 9: return <BFProblemsForm data={formData.bfProblems} onChange={updateSection('bfProblems')} t={t} />;
-      case 10: return <DischargeFollowupForm data={formData.discharge} onChange={updateSection('discharge')} t={t} />;
-      default: return null;
+  const removeBaby = (index) => {
+    if (babies.length <= 1) return;
+    setBabies(prev => prev.filter((_, i) => i !== index).map((b, i) => ({ ...b, baby_number: i + 1 })));
+    setFormData(prev => ({ ...prev, identification: { ...prev.identification, baby_count: babies.length - 1 } }));
+  };
+
+  const handleSave = (statusOverride) => {
+    const patientId = id || generateId();
+    const facilityCode = getFacilityCode(formData.identification.facility_name);
+    const status = statusOverride || 'draft';
+
+    const patientData = {
+      id: patientId,
+      patient_id: patientId,
+      status,
+      district: formData.identification.district,
+      block_name: formData.identification.block_name,
+      facility_type: formData.identification.facility_type,
+      facility_name: formData.identification.facility_name,
+      other_facility_name: formData.identification.other_facility_name,
+      date_of_admission: formData.identification.date_of_admission,
+      mother_name: formData.identification.mother_name,
+      father_name: formData.identification.father_name,
+      mother_mobile: formData.identification.mother_mobile,
+      alternative_mobile: formData.identification.alternative_mobile,
+      verified_mobile: formData.identification.verified_mobile,
+      contact_verification_status: formData.identification.contact_verification_status,
+      village: formData.identification.village,
+      rural_urban: formData.identification.rural_urban,
+      asha_name: formData.identification.asha_name,
+      asha_mobile: formData.identification.asha_mobile,
+      anm_name: formData.identification.anm_name,
+      anm_mobile: formData.identification.anm_mobile,
+      assessor_name: formData.identification.assessor_name,
+      mother_age: formData.identification.mother_age,
+      gravida: formData.identification.gravida,
+      para: formData.identification.para,
+      lmp: formData.identification.lmp,
+      hrp_status: formData.identification.isHRP,
+      hrp_type: formData.identification.hrp_type,
+      registration_remarks: formData.identification.registration_remarks,
+      baby_count: babies.length,
+      counsellor_id: user?.id,
+      counsellor_name: user?.name,
+      supervisor_id: user?.id,
+      supervisor_name: user?.name,
+      handover_status: status === 'submitted' ? 'submitted_to_admin' : 'in_progress_by_supervisor',
+    };
+
+    upsertPatient(patientData);
+
+    babies.forEach((baby, i) => {
+      const babyData = {
+        ...baby,
+        id: `${patientId}_B${i + 1}`,
+        patient_id: patientId,
+        baby_id: baby.baby_id || generateBabyId(patientId, i + 1, facilityCode),
+        baby_number: i + 1,
+        baby_classification: classifyBaby(baby.gestational_age, baby.birth_weight),
+        date_of_delivery: formData.afterBirth?.dateOfBirth || baby.date_of_delivery,
+        time_of_birth: formData.afterBirth?.timeOfBirth || baby.time_of_birth,
+        type_of_delivery: formData.afterBirth?.deliveryType,
+        gestational_age: baby.gestational_age,
+        birth_weight: baby.birth_weight,
+      };
+      upsertBaby(babyData);
+    });
+
+    localStorage.setItem(`sankalp_assessment_${patientId}`, JSON.stringify(formData));
+
+    if (status === 'submitted') {
+      generateFollowups(patientId, formData.discharge?.dateOfDischarge || new Date().toISOString().split('T')[0]);
+    }
+
+    addAuditLog({
+      user_id: user?.id, user_name: user?.name, role: user?.role,
+      action: status === 'submitted' ? 'submitted' : status === 'draft' ? 'saved_draft' : 'updated',
+      record_id: patientId,
+    });
+
+    if (statusOverride) {
+      setSubmitted(true);
+      setTimeout(() => navigate(id ? `/supervisor/patients/${patientId}` : '/supervisor/patients'), 2000);
+    } else {
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
     }
   };
 
+  const isStillBirth = babies.some(b => b.outcome_of_delivery === 'still_birth');
+  const hasKmcEligible = babies.some(b => isKmcEligible(b.outcome_of_delivery, b.birth_weight, b.gestational_age, b.baby_condition));
+
   if (submitted) return (
-    <AppLayout title={t('patientRegistration')}>
+    <AppLayout title={id ? t('editPatient') : t('patientRegistration')}>
       <div className="flex flex-col items-center justify-center min-h-64 gap-4">
         <div className="w-20 h-20 rounded-full bg-emerald-100 flex items-center justify-center">
           <CheckCircle2 size={40} className="text-emerald-500" />
@@ -594,8 +335,69 @@ export default function NewPatient() {
     </AppLayout>
   );
 
+  if (isLoading && id) {
+    return (
+      <AppLayout title={id ? t('editPatient') : t('patientRegistration')}>
+        <div className="flex flex-col items-center justify-center min-h-64">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#0F4C75]"></div>
+          <p className="mt-4 text-slate-600">{t('loading')}</p>
+        </div>
+      </AppLayout>
+    );
+  }
+
+  const renderStep = () => {
+    switch (step) {
+      case 1: return (
+        <div>
+          <SectionA data={formData.identification} onChange={updateSection('identification')} t={t} user={user} />
+          {/* Baby Count & Registration */}
+          <div className="mt-6 pt-6 border-t border-slate-100">
+            <h3 className="text-lg font-bold text-slate-800 mb-3 flex items-center gap-2">
+              <Baby size={18} className="text-[#0F4C75]" /> {t('babyDetails')}
+            </h3>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-slate-700 mb-2">{t('numberOfBabies')}</label>
+              <div className="flex gap-3 flex-wrap">
+                {[1, 2, 3].map(n => (
+                  <button key={n} type="button" onClick={() => {
+                    setBabies(Array.from({ length: n }, (_, i) => babies[i] || { baby_number: i + 1, gender: 'male', uhid: '', gestational_age: '', birth_weight: '', outcome_of_delivery: 'live_birth', baby_condition: 'normal', baby_location: 'with_mother' }));
+                    setFormData(prev => ({ ...prev, identification: { ...prev.identification, baby_count: n } }));
+                  }} className={`px-4 py-2 rounded-xl text-sm font-semibold border-2 transition-all ${babies.length === n ? 'bg-[#0F4C75] text-white border-[#0F4C75]' : 'bg-white text-slate-600 border-slate-200'}`}>
+                    {n} {n === 1 ? 'Baby' : 'Babies'}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-3">
+              {babies.map((baby, idx) => (
+                <BabyRegistrationForm key={idx} baby={baby} index={idx} totalBabies={babies.length} onUpdate={updateBaby} onRemove={removeBaby} t={t} />
+              ))}
+            </div>
+            {babies.length < 3 && (
+              <button onClick={addBaby} className="mt-3 flex items-center gap-2 px-4 py-2 border-2 border-dashed border-slate-300 rounded-xl text-sm font-medium text-slate-600 hover:border-blue-400 hover:text-blue-600 transition-colors">
+                <Plus size={14} /> {t('addBaby')}
+              </button>
+            )}
+          </div>
+        </div>
+        );
+      case 2: return <SectionB data={formData.ancCounselling} onChange={updateSection('ancCounselling')} t={t} />;
+      case 3: return <SectionC data={formData.afterBirth} onChange={updateSection('afterBirth')} t={t} />;
+      case 4: return <BreastfeedingForm data={formData.breastfeeding} onChange={updateSection('breastfeeding')} t={t} />;
+      case 5: return <SectionD data={formData.bfAssessment} onChange={updateSection('bfAssessment')} t={t} />;
+      case 6: return <SectionE data={formData.postnatalWard} onChange={updateSection('postnatalWard')} t={t} />;
+      case 7: return <SectionF data={formData.sickBaby} onChange={updateSection('sickBaby')} t={t} />;
+      case 8: return <SectionG data={formData.dailyMonitoring} onChange={updateSection('dailyMonitoring')} t={t} />;
+      case 9: return <SectionH data={formData.bfProblems} onChange={updateSection('bfProblems')} t={t} />;
+      case 10: return <SectionI data={formData.discharge} onChange={updateSection('discharge')} t={t} />;
+      case 11: return <SectionJ data={formData.postDischargePlan} onChange={updateSection('postDischargePlan')} t={t} />;
+      default: return null;
+    }
+  };
+
   return (
-    <AppLayout title={t('patientRegistration')}>
+    <AppLayout title={id ? t('editPatient') : t('patientRegistration')}>
       <div className="max-w-3xl mx-auto">
         <div className="flex items-center justify-between mb-5">
           <div>
@@ -603,7 +405,7 @@ export default function NewPatient() {
             <p className="text-slate-500 text-sm">{t('stepOf').replace('{step}', step).replace('{total}', STEPS.length)}</p>
           </div>
           <div className="flex gap-2">
-            <button onClick={handleDraft} className="flex items-center gap-2 px-4 py-2 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors">
+            <button onClick={() => handleSave('draft')} className="flex items-center gap-2 px-4 py-2 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors">
               <Save size={14} />
               {saved ? t('saved') : t('saveDraft')}
             </button>
@@ -615,6 +417,13 @@ export default function NewPatient() {
         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 mb-5">
           {renderStep()}
         </div>
+
+        {/* KMC Section - shown if any baby is eligible */}
+        {hasKmcEligible && step === 7 && (
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 mb-5">
+            <KmcSection babies={babies} formData={formData} updateSection={updateSection} t={t} />
+          </div>
+        )}
 
         <div className="flex items-center justify-between">
           <button onClick={() => step > 1 ? setStep(s => s - 1) : navigate('/supervisor')}
@@ -630,7 +439,7 @@ export default function NewPatient() {
               {t('nextSection')} <ChevronRight size={16} />
             </button>
           ) : (
-            <button onClick={handleSubmit}
+            <button onClick={() => handleSave('submitted')}
               className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors">
               <Send size={14} />
               {t('submitForReview')}

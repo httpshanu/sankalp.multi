@@ -6,13 +6,13 @@ export default function StatsCard({ title, value, subtitle, icon: Icon, iconBg, 
         <Icon size={22} className="text-white" />
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-slate-500 font-medium uppercase tracking-wide truncate" style={{ fontSize: '13px' }}>{title}</p>
-        <p className="text-slate-900 font-bold mt-0.5" style={{ fontSize: '32px' }}>{value}</p>
+        <p className="text-slate-500 font-medium uppercase tracking-wide truncate text-xs">{title}</p>
+        <p className="text-slate-900 font-bold mt-0.5 text-3xl">{value}</p>
         {subtitle && (
-          <p className="text-slate-500 mt-1" style={{ fontSize: '14px' }}>{subtitle}</p>
+          <p className="text-slate-500 mt-1 text-sm">{subtitle}</p>
         )}
         {trend && (
-          <p className={`mt-1 font-medium ${trend > 0 ? 'text-emerald-600' : 'text-rose-500'}`} style={{ fontSize: '13px' }}>
+          <p className={`mt-1 font-medium text-xs ${trend > 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
             {trend > 0 ? '↑' : '↓'} {Math.abs(trend)}% {trendLabel}
           </p>
         )}

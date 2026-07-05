@@ -3,6 +3,7 @@ import { Bell, Search, X } from 'lucide-react';
 import { useLanguage } from '../../context/useLanguage';
 import { MOCK_NOTIFICATIONS } from '../../data/mockData';
 import { timeAgo } from '../../lib/utils';
+import OrganizationLogos from './OrganizationLogos';
 
 export default function Topbar({ title }) {
   const [showNotifs, setShowNotifs] = useState(false);
@@ -22,9 +23,12 @@ export default function Topbar({ title }) {
 
   return (
     <header className="h-14 flex items-center justify-between px-6 bg-white border-b border-slate-100 flex-shrink-0 relative z-20">
-      {/* Left: Title */}
-      <div className="flex items-center gap-3">
-        <h2 className="text-slate-800 font-semibold text-lg">{title}</h2>
+      {/* Left: Logo Group & Title */}
+      <div className="flex items-center gap-4">
+        <OrganizationLogos variant="header" className="hidden md:flex" />
+        <OrganizationLogos variant="mobile" className="flex md:hidden" />
+        <span className="h-5 w-px bg-slate-200 hidden sm:block"></span>
+        <h2 className="text-slate-800 font-semibold text-base sm:text-lg">{title}</h2>
       </div>
 
       {/* Right: Language + Search + Notif + Help */}

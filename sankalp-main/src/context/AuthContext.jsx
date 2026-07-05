@@ -18,10 +18,25 @@ const MOCK_ACCOUNTS = {
     facility: 'All Facilities',
     password: 'admin123',
   },
+  'nurse@sankalp.in': {
+    id: 'nur1',
+    name: 'Nurse Kavita Devi',
+    role: 'nurse',
+    designation: 'Staff Nurse',
+    facility: 'CHC-Bhadrabad',
+    password: 'nurse123',
+  },
 };
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(() => {
+    try {
+      const raw = localStorage.getItem('sankalp_auth_user');
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  });
   const [error, setError] = useState('');
 
   const login = (email, password) => {
@@ -37,11 +52,17 @@ export function AuthProvider({ children }) {
     }
     const { password: _, ...userData } = account;
     setUser(userData);
+    try {
+      localStorage.setItem('sankalp_auth_user', JSON.stringify(userData));
+    } catch {}
     return true;
   };
 
   const logout = () => {
     setUser(null);
+    try {
+      localStorage.removeItem('sankalp_auth_user');
+    } catch {}
   };
 
   return (

@@ -1,0 +1,25 @@
+{
+  "name": "sankalp2.0",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "npm --prefix sankalp-main run dev"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/httpshanu/sankalp2.0.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/httpshanu/sankalp2.0/issues"
+  },
+  "homepage": "https://github.com/httpshanu/sankalp2.0#readme",
+  "devDependencies": {
+    "@playwright/test": "^1.61.1",
+    "@types/node": "^26.0.1"
+  }
+}

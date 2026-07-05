@@ -7,6 +7,7 @@ import {
   LayoutDashboard, Users, FileText, Settings, LogOut,
   ChevronLeft, ChevronRight, Building2, ClipboardList
 } from 'lucide-react';
+import OrganizationLogos from './OrganizationLogos';
 
 export default function Sidebar() {
   const { user, logout } = useAuth();
@@ -21,16 +22,23 @@ export default function Sidebar() {
     { to: '/supervisor/settings', label: t('settings'), icon: Settings },
   ];
 
+  const NURSE_NAV = [
+    { to: '/nurse', label: t('dashboard'), icon: LayoutDashboard, end: true },
+    { to: '/nurse/patients', label: t('patientRegistry'), icon: ClipboardList },
+    { to: '/nurse/settings', label: t('settings'), icon: Settings },
+  ];
+
   const ADMIN_NAV = [
     { to: '/admin', label: t('dashboard'), icon: LayoutDashboard, end: true },
     { to: '/admin/patients', label: t('allPatients'), icon: ClipboardList },
     { to: '/admin/reports', label: t('reports'), icon: FileText },
     { to: '/admin/users', label: t('userManagement'), icon: Users },
     { to: '/admin/facilities', label: t('facilities'), icon: Building2 },
+    { to: '/admin/audit', label: t('auditLogs'), icon: FileText },
     { to: '/admin/settings', label: t('settings'), icon: Settings },
   ];
 
-  const nav = user?.role === 'admin' ? ADMIN_NAV : SUPERVISOR_NAV;
+  const nav = user?.role === 'admin' ? ADMIN_NAV : user?.role === 'nurse' ? NURSE_NAV : SUPERVISOR_NAV;
 
   const handleLogout = () => {
     logout();
@@ -45,22 +53,8 @@ export default function Sidebar() {
       style={{ background: 'linear-gradient(180deg, #0F4C75 0%, #0a3254 100%)', flexShrink: 0 }}
     >
       {/* Logo */}
-      <div className="flex items-center justify-center px-4 py-5 border-b border-white/10" style={{ mixBlendMode: 'screen' }}>
-        {collapsed ? (
-          <img 
-            src="/logo.png" 
-            alt="Sankalp" 
-            className="w-12 h-12 object-cover flex-shrink-0"
-            style={{ filter: 'brightness(1.2) grayscale(1) invert(1) sepia(1) hue-rotate(140deg) saturate(3) brightness(1.5)' }}
-          />
-        ) : (
-          <img 
-            src="/logo.png" 
-            alt="Sankalp" 
-            className="w-48 object-contain"
-            style={{ filter: 'brightness(1.2) grayscale(1) invert(1) sepia(1) hue-rotate(140deg) saturate(3) brightness(1.5)' }}
-          />
-        )}
+      <div className="px-3 py-5 border-b border-white/10 flex justify-center items-center">
+        <OrganizationLogos variant="sidebar" isSidebarCollapsed={collapsed} />
       </div>
 
       {/* Collapse toggle */}
@@ -75,7 +69,7 @@ export default function Sidebar() {
       <nav className="flex-1 overflow-y-auto py-4 px-2 scrollbar-hide">
         {!collapsed && (
           <p className="text-blue-300/70 text-xs font-semibold uppercase tracking-wider px-3 mb-2">
-            {user?.role === 'admin' ? t('adminPanel') : t('supervisor')}
+            {user?.role === 'admin' ? t('adminPanel') : user?.role === 'nurse' ? t('nurse') : t('supervisor')}
           </p>
         )}
         <ul className="space-y-1">

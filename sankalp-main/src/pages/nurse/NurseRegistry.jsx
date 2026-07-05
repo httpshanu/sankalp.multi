@@ -4,13 +4,15 @@ import AppLayout from '../../components/layout/AppLayout';
 import StatusBadge from '../../components/patient/StatusBadge';
 import { useLanguage } from '../../context/useLanguage';
 import { useAuth } from '../../context/useAuth';
-import { getPatientsBySupervisor, getBabiesByPatient, getFollowupsByPatient, addRemark, getCallStatusColor } from '../../data/dataStore';
-import { formatDate, canEdit } from '../../lib/utils';
-import { Search, Plus, Eye, Edit, Phone, MessageSquare, Download, History, ChevronDown, ChevronUp } from 'lucide-react';
+import {
+  getPatientsByNurse, getBabiesByPatient, getFollowupsByPatient,
+  addRemark, canEditRecord
+} from '../../data/dataStore';
+import { Search, Plus, Eye, Edit, Phone, ChevronDown } from 'lucide-react';
 
-const STATUS_KEYS = ['all', 'draft', 'submitted', 'returned', 'approved', 'closed'];
+const STATUS_KEYS = ['all', 'with_nurse', 'submitted_to_supervisor', 'returned'];
 
-export default function PatientRegistry() {
+export default function NurseRegistry() {
   const navigate = useNavigate();
   const { t } = useLanguage();
   const { user } = useAuth();
@@ -22,7 +24,7 @@ export default function PatientRegistry() {
 
   useEffect(() => {
     if (user?.id) {
-      setPatients(getPatientsBySupervisor(user.id));
+      setPatients(getPatientsByNurse(user.id));
     }
   }, [user]);
 
@@ -44,7 +46,7 @@ export default function PatientRegistry() {
     addRemark({
       patient_id: patientId,
       remark_text: text,
-      remark_type: 'supervisor',
+      remark_type: 'nurse',
       added_by_user_id: user?.id,
       added_by_name: user?.name,
       added_by_role: user?.role,
@@ -59,25 +61,15 @@ export default function PatientRegistry() {
     return `${completed}/${fups.length}`;
   };
 
-  const getCallStatusSummary = (patientId) => {
-    const fups = getFollowupsByPatient(patientId);
-    if (fups.length === 0) return null;
-    const statuses = fups.map(f => f.call_status);
-    if (statuses.every(s => s === 'connected' || s === 'completed')) return { label: 'All Connected', color: 'bg-green-100 text-green-700' };
-    if (statuses.some(s => s === 'invalid_number' || s === 'wrong_number')) return { label: 'Invalid Number', color: 'bg-red-100 text-red-700' };
-    if (statuses.some(s => s === 'not_connected' || s === 'switched_off')) return { label: 'Not Connected', color: 'bg-orange-100 text-orange-700' };
-    return { label: 'Pending', color: 'bg-yellow-100 text-yellow-700' };
-  };
-
   return (
     <AppLayout title={t('patientRegistry')}>
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
         <div>
-          <h1 className="text-xl font-bold text-slate-800">{t('myPatientRecords')}</h1>
+          <h1 className="text-xl font-bold text-slate-800">{t('myRegistrations')}</h1>
           <p className="text-slate-500 text-sm mt-1">{filtered.length} {t('recordsFound')}</p>
         </div>
         <button
-          onClick={() => navigate('/supervisor/patients/new')}
+          onClick={() => navigate('/nurse/patients/new')}
           className="flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-semibold text-white transition-all hover:opacity-90"
           style={{ background: 'linear-gradient(135deg,#0F4C75,#1B6CA8)' }}
         >
@@ -93,7 +85,7 @@ export default function PatientRegistry() {
             <input
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Search by name, ID, mobile, father, village..."
+              placeholder={t('searchByNameUhid')}
               className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
             />
           </div>
@@ -140,18 +132,13 @@ export default function PatientRegistry() {
               ) : filtered.map(p => {
                 const isExpanded = expandedRow === p.id;
                 const babyCount = p.baby_count || 1;
-                const isExpandable = true; // All rows are expandable
+                const canEdit = canEditRecord(p.status, user?.role, user);
                 return (
                   <Fragment key={p.id}>
                     {/* Main row */}
                     <tr
-                      key={p.id}
                       className={`cursor-pointer hover:bg-slate-50/70 transition-colors ${isExpanded ? 'bg-blue-50' : ''}`}
-                      onClick={() => {
-                        if (isExpandable) {
-                          setExpandedRow(expandedRow === p.id ? null : p.id);
-                        }
-                      }}
+                      onClick={() => setExpandedRow(expandedRow === p.id ? null : p.id)}
                     >
                       <td className="px-4 py-3 text-xs font-mono text-slate-600">{p.patient_id}</td>
                       <td className="px-4 py-3">
@@ -174,18 +161,18 @@ export default function PatientRegistry() {
                       <td className="px-4 py-3"><StatusBadge status={p.status} /></td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1">
-                          {canEdit(p.status) && (
+                          {canEdit && (
                             <button
-                              onClick={() => navigate(`/supervisor/patients/${p.id}/edit`)}
+                              onClick={(e) => { e.stopPropagation(); navigate(`/nurse/patients/${p.id}/edit`); }}
                               className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
                               title="Edit"
                             >
                               <Edit size={14} />
                             </button>
                           )}
-                          {!canEdit(p.status) && (
+                          {!canEdit && (
                             <button
-                              onClick={() => navigate(`/supervisor/patients/${p.id}`)}
+                              onClick={(e) => { e.stopPropagation(); navigate(`/nurse/patients/${p.id}`); }}
                               className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
                               title="View"
                             >
@@ -193,7 +180,7 @@ export default function PatientRegistry() {
                             </button>
                           )}
                           {p.mother_mobile && (
-                            <a href={`tel:${p.mother_mobile}`} className="p-1.5 rounded-lg text-slate-400 hover:text-green-600 hover:bg-green-50 transition-colors" title="Call">
+                            <a href={`tel:${p.mother_mobile}`} onClick={(e) => e.stopPropagation()} className="p-1.5 rounded-lg text-slate-400 hover:text-green-600 hover:bg-green-50 transition-colors" title="Call">
                               <Phone size={14} />
                             </a>
                           )}
@@ -244,119 +231,50 @@ export default function PatientRegistry() {
                                   <p className="text-sm font-medium text-slate-700">{t('alternativeMobile')}:</p>
                                   <p className="text-sm text-slate-600">{p.alternative_mobile || '—'}</p>
                                 </div>
-                                <div>
-                                  <p className="text-sm font-medium text-slate-700">{t('verifiedMobile')}:</p>
-                                  <p className="text-sm text-slate-600">
-                                    {p.verified_mobile === 'motherNumber' ? t('motherNumber') : p.verified_mobile === 'alternativeNumber' ? t('alternativeNumber') : t('other')}
-                                  </p>
-                                </div>
-                                <div>
-                                  <p className="text-sm font-medium text-slate-700">{t('contactVerificationStatus')}:</p>
-                                  <p className="text-sm text-slate-600">{p.contact_verification_status === 'verified' ? t('verified') : t('not_verified')}</p>
-                                </div>
-                              </div>
-
-                              {/* ASHA/ANM */}
-                              <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                  <p className="text-sm font-medium text-slate-700">{t('ashaName')}:</p>
-                                  <p className="text-sm text-slate-600">{p.asha_name || '—'}</p>
-                                </div>
-                                <div>
-                                  <p className="text-sm font-medium text-slate-700">{t('ashaMobile')}:</p>
-                                  <p className="text-sm text-slate-600">{p.asha_mobile || '—'}</p>
-                                </div>
-                                <div>
-                                  <p className="text-sm font-medium text-slate-700">{t('anmName')}:</p>
-                                  <p className="text-sm text-slate-600">{p.anm_name || '—'}</p>
-                                </div>
-                                <div>
-                                  <p className="text-sm font-medium text-slate-700">{t('anmMobile')}:</p>
-                                  <p className="text-sm text-slate-600">{p.anm_mobile || '—'}</p>
-                                </div>
-                              </div>
-
-                              {/* Assessor & Mother Details */}
-                              <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                  <p className="text-sm font-medium text-slate-700">{t('assessorName')}:</p>
-                                  <p className="text-sm text-slate-600">{p.assessor_name || '—'}</p>
-                                </div>
-                                <div>
-                                  <p className="text-sm font-medium text-slate-700">{t('motherAge')}:</p>
-                                  <p className="text-sm text-slate-600">{p.mother_age || '—'}</p>
-                                </div>
-                                <div>
-                                  <p className="text-sm font-medium text-slate-700">{t('gravida')}:</p>
-                                  <p className="text-sm text-slate-600">{p.gravida || '—'}</p>
-                                </div>
-                                <div>
-                                  <p className="text-sm font-medium text-slate-700">{t('para')}:</p>
-                                  <p className="text-sm text-slate-600">{p.para || '—'}</p>
-                                </div>
-                              </div>
-
-                              {/* LMP & HRP */}
-                              <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                  <p className="text-sm font-medium text-slate-700">{t('lmp')}:</p>
-                                  <p className="text-sm text-slate-600">{p.lmp || '—'}</p>
-                                </div>
-                                <div>
-                                  <p className="text-sm font-medium text-slate-700">{t('wasMotherHRP')}:</p>
-                                  <p className="text-sm text-slate-600">{p.hrp_status === 'yes' ? t('yes') : t('no')}</p>
-                                </div>
-                                {p.hrp_status === 'yes' && (
-                                  <div className="col-span-2">
-                                    <p className="text-sm font-medium text-slate-700">{t('hrpType')}:</p>
-                                    <p className="text-sm text-slate-600">{p.hrp_type || '—'}</p>
-                                  </div>
-                                )}
-                              </div>
-
-                              {/* Registration Remarks */}
-                              <div className="mb-4">
-                                <p className="text-sm font-medium text-slate-700">{t('registrationRemarks')}:</p>
-                                <p className="text-sm text-slate-600 whitespace-pre-wrap">{p.registration_remarks || '—'}</p>
                               </div>
 
                               {/* Baby Details */}
-                              <div className="mb-4">
-                                <p className="text-sm font-medium text-slate-700">{t('babyDetails')}:</p>
-                                <div className="space-y-2">
-                                  {p.babies?.map((baby, idx) => (
-                                    <div key={idx} className="flex items-center gap-2 text-sm text-slate-600">
-                                      <span className="font-medium">{baby.baby_id || `Baby ${baby.baby_number}`}:</span>
-                                      <span className="flex-1">
-                                        <span className="mr-2">{baby.gender === 'male' ? t('male') : t('female')}</span>
-                                        {baby.gestational_age && (
-                                          <>
-                                            {baby.gestational_age}{' '}
-                                            {t('weeks')}
-                                          </>
-                                        )}
-                                        {baby.birth_weight && (
-                                          <>
-                                            {baby.birth_weight}{' '}
-                                            {t('grams')}
-                                          </>
-                                        )}
-                                      </span>
-                                    </div>
-                                  ))}
+                              {p.babies?.length > 0 && (
+                                <div>
+                                  <p className="text-sm font-medium text-slate-700 mb-2">{t('babyDetails')}:</p>
+                                  <div className="space-y-2">
+                                    {p.babies.map((baby, idx) => (
+                                      <div key={idx} className="flex items-center gap-2 text-sm text-slate-600">
+                                        <span className="font-medium">{baby.baby_id || `Baby ${baby.baby_number}`}:</span>
+                                        <span>
+                                          <span className="mr-2 capitalize">{baby.gender === 'male' ? t('male') : t('female')}</span>
+                                          {baby.gestational_age && <span className="mr-2">{baby.gestational_age} {t('weeks')}</span>}
+                                          {baby.birth_weight && <span>{baby.birth_weight} {t('grams')}</span>}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Remarks Section */}
+                              <div>
+                                <p className="text-sm font-medium text-slate-700 mb-2">{t('remarks')}:</p>
+                                <div className="flex gap-2">
+                                  <input
+                                    value={remarkInput[p.id] || ''}
+                                    onChange={(e) => setRemarkInput(prev => ({ ...prev, [p.id]: e.target.value }))}
+                                    placeholder={t('addRemark')}
+                                    className="flex-1 px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                                    onClick={(e) => e.stopPropagation()}
+                                  />
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handleAddRemark(p.id); }}
+                                    className="px-3 py-2 bg-[#0F4C75] text-white rounded-xl text-sm font-semibold hover:bg-[#0a3254] transition-colors"
+                                  >
+                                    {t('add')}
+                                  </button>
                                 </div>
                               </div>
 
-                              {/* Counsellor & Supervisor */}
-                              <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                  <p className="text-sm font-medium text-slate-700">{t('counsellorName')}:</p>
-                                  <p className="text-sm text-slate-600">{p.counsellor_name || '—'}</p>
-                                </div>
-                                <div>
-                                  <p className="text-sm font-medium text-slate-700">{t('supervisorName')}:</p>
-                                  <p className="text-sm text-slate-600">{p.supervisor_name || '—'}</p>
-                                </div>
+                              {/* Follow-up Status */}
+                              <div>
+                                <p className="text-sm font-medium text-slate-700">{t('followUpStatus')}: {getFollowupStatusSummary(p.id)}</p>
                               </div>
                             </div>
                           </div>

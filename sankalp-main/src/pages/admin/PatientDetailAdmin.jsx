@@ -1,30 +1,94 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import AppLayout from '../../components/layout/AppLayout';
 import StatusBadge from '../../components/patient/StatusBadge';
 import { useLanguage } from '../../context/useLanguage';
-import { MOCK_PATIENTS } from '../../data/mockData';
-import { formatDateTime } from '../../lib/utils';
-import { ArrowLeft, CheckCircle2, RotateCcw, XCircle, Lock, User, Baby, Heart } from 'lucide-react';
+import { useAuth } from '../../context/useAuth';
+import { getPatientById, getBabiesByPatient, getFollowupsByPatient, getRemarksByPatient, getAssessmentData, addRemark, updatePatientStatus, addAuditLog, getCallStatusColor } from '../../data/dataStore';
+import { formatDateTime, formatDate } from '../../lib/utils';
+import FollowupTracker from '../../components/FollowupTracker';
+import AssessmentReadOnly from '../../components/Assessment/AssessmentReadOnly';
+import {
+  ArrowLeft, CheckCircle2, RotateCcw, XCircle, Lock, User, Baby, Heart,
+  ClipboardList, ChevronDown, ChevronUp, Phone, MessageSquare
+} from 'lucide-react';
 
 export default function PatientDetailAdmin() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { t } = useLanguage();
-  const patient = MOCK_PATIENTS.find(p => p.id === id) || MOCK_PATIENTS[0];
+  const { user } = useAuth();
 
+  const [patient, setPatient] = useState(null);
+  const [patientBabies, setPatientBabies] = useState([]);
+  const [followups, setFollowups] = useState([]);
+  const [remarks, setRemarksList] = useState([]);
+  const [assessment, setAssessment] = useState(null);
   const [action, setAction] = useState('');
-  const [remarks, setRemarks] = useState('');
+  const [reviewRemarks, setReviewRemarks] = useState('');
+  const [newRemark, setNewRemark] = useState('');
   const [done, setDone] = useState(false);
-  const [currentStatus, setCurrentStatus] = useState(patient.status);
+  const [showAssessment, setShowAssessment] = useState(false);
+  const [activeBabyTab, setActiveBabyTab] = useState(0);
+
+  useEffect(() => {
+    if (id) {
+      const p = getPatientById(id);
+      if (p) setPatient(p);
+      setPatientBabies(getBabiesByPatient(id));
+      setFollowups(getFollowupsByPatient(id));
+      setRemarksList(getRemarksByPatient(id));
+    }
+  }, [id]);
+
+  useEffect(() => {
+    if (id) {
+      const assessmentData = getAssessmentData(id);
+      setAssessment(assessmentData);
+    }
+  }, [id]);
+
+  if (!patient) {
+    return (
+      <AppLayout title={t('patient')}>
+        <div className="text-center py-12 text-slate-400">{t('loading')}</div>
+      </AppLayout>
+    );
+  }
+
+  const isLocked = patient.status === 'approved' || patient.status === 'closed';
+  const currentStatus = done ? (action === 'approve' ? 'approved' : action === 'return' ? 'returned' : 'closed') : patient.status;
 
   const handleAction = () => {
     if (!action) return;
-    setCurrentStatus(action === 'approve' ? 'approved' : action === 'return' ? 'returned' : 'closed');
+    const newStatus = action === 'approve' ? 'approved' : action === 'return' ? 'returned' : 'closed';
+    updatePatientStatus(id, newStatus, user?.id, user?.name, user?.role);
+    if (reviewRemarks) {
+      addRemark({
+        patient_id: id,
+        remark_text: reviewRemarks,
+        remark_type: 'admin_review',
+        added_by_user_id: user?.id,
+        added_by_name: user?.name,
+        added_by_role: user?.role,
+      });
+    }
     setDone(true);
   };
 
-  const isLocked = currentStatus === 'approved' || currentStatus === 'closed';
+  const handleAddRemark = () => {
+    if (!newRemark.trim()) return;
+    addRemark({
+      patient_id: id,
+      remark_text: newRemark,
+      remark_type: 'admin',
+      added_by_user_id: user?.id,
+      added_by_name: user?.name,
+      added_by_role: user?.role,
+    });
+    setRemarksList(getRemarksByPatient(id));
+    setNewRemark('');
+  };
 
   const Section = ({ icon: Icon, title, children }) => (
     <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-5 mb-4">
@@ -51,84 +115,121 @@ export default function PatientDetailAdmin() {
         </button>
         <div className="flex-1">
           <div className="flex items-center gap-3">
-            <h1 className="text-xl font-bold text-slate-800">{t('baby')} {patient.motherDetails.motherName}</h1>
+            <h1 className="text-xl font-bold text-slate-800">{patient.mother_name || 'Patient'}</h1>
             <StatusBadge status={currentStatus} />
             {isLocked && <span className="flex items-center gap-1 text-xs text-slate-500"><Lock size={12} /> {t('permanentlyLocked')}</span>}
           </div>
-          <p className="text-slate-400 text-sm">ID: {patient.id} · UHID: {patient.babyDetails.uhid} · {patient.supervisorName}</p>
+          <p className="text-slate-400 text-sm">ID: {patient.patient_id} · {patient.supervisor_name || '—'} · {patient.counsellor_name || '—'}</p>
         </div>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
         <div className="xl:col-span-2">
           <Section icon={User} title={t('motherDetails')}>
-            <Field label={t('motherName')} value={patient.motherDetails.motherName} />
-            <Field label={t('fatherName')} value={patient.motherDetails.fatherName} />
-            <Field label={t('age')} value={`${patient.motherDetails.age} ${t('years')}`} />
-            <Field label={t('contact')} value={patient.motherDetails.contact} />
-            <Field label={t('village')} value={patient.motherDetails.village} />
-            <Field label={t('ashaWorker')} value={patient.motherDetails.ashaName} />
+            <Field label={t('motherName')} value={patient.mother_name} />
+            <Field label={t('fatherName')} value={patient.father_name} />
+            <Field label={t('motherAge')} value={patient.mother_age ? `${patient.mother_age} years` : '—'} />
+            <Field label={t('motherMobile')} value={patient.mother_mobile} />
+            <Field label={t('alternativeMobile')} value={patient.alternative_mobile} />
+            <Field label={t('verifiedMobile')} value={patient.verified_mobile} />
+            <Field label={t('village')} value={patient.village} />
+            <Field label={t('district')} value={patient.district} />
+            <Field label={t('blockName')} value={patient.block_name} />
+            <Field label={t('facilityName')} value={patient.facility_name} />
+            <Field label={t('ashaWorker')} value={patient.asha_name} />
+            <Field label={t('counsellorName')} value={patient.counsellor_name} />
           </Section>
 
-          <Section icon={Baby} title={t('babyDetails')}>
-            <Field label={t('gender')} value={patient.babyDetails.gender} />
-            <Field label={t('uhid')} value={patient.babyDetails.uhid} />
-            <Field label={t('area')} value={patient.babyDetails.area} />
-            <Field label={t('birthWeight')} value={`${patient.babyDetails.birthWeight} ${t('kg')}`} />
-            <Field label={t('gestationalAge')} value={`${patient.babyDetails.gestationalAge} ${t('weeks')}`} />
-            <Field label={t('admissionLevel')} value={patient.admissionLevel} />
-          </Section>
-
-          <Section icon={Heart} title={t('breastfeedingCounselling')}>
-            {patient.breastfeeding ? (
+          {/* Baby Details */}
+          <Section icon={Baby} title={`${t('babyDetails')} (${patientBabies.length})`}>
+            {patientBabies.length > 0 ? (
               <>
-                {[
-                  [t('colostrumFeeding'), patient.breastfeeding.colostrum],
-                  [t('earlyInitiation'), patient.breastfeeding.earlyInitiation],
-                  [t('exclusiveBreastfeeding'), patient.breastfeeding.exclusiveBreastfeeding],
-                  [t('correctLatching'), patient.breastfeeding.latching],
-                  [t('prelactealFeed'), patient.breastfeeding.prelactealFeed],
-                ].map(([label, val]) => (
-                  <div key={label}>
-                    <p className="text-xs text-slate-400 font-medium uppercase tracking-wide mb-1">{label}</p>
-                    <span className={`text-sm font-semibold ${val ? 'text-emerald-600' : 'text-slate-400'}`}>{val ? `✓ ${t('done')}` : `✗ ${t('notDone')}`}</span>
+                {/* Baby Tabs */}
+                {patientBabies.length > 1 && (
+                  <div className="col-span-3 flex gap-2 mb-2">
+                    {patientBabies.map((b, i) => (
+                      <button key={i} onClick={() => setActiveBabyTab(i)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${activeBabyTab === i ? 'bg-[#0F4C75] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                        Baby {i + 1} ({b.baby_id})
+                      </button>
+                    ))}
                   </div>
-                ))}
+                )}
+                {patientBabies[activeBabyTab] && (
+                  <>
+                    <Field label="Baby ID" value={patientBabies[activeBabyTab].baby_id} />
+                    <Field label={t('gender')} value={patientBabies[activeBabyTab].gender} />
+                    <Field label="UHID" value={patientBabies[activeBabyTab].uhid} />
+                    <Field label={t('gestationalAge')} value={patientBabies[activeBabyTab].gestational_age ? `${patientBabies[activeBabyTab].gestational_age} weeks` : '—'} />
+                    <Field label={t('birthWeightGrams')} value={patientBabies[activeBabyTab].birth_weight ? `${patientBabies[activeBabyTab].birth_weight}g` : '—'} />
+                    <Field label={t('babyClassification')} value={patientBabies[activeBabyTab].baby_classification} />
+                    <Field label="Outcome" value={patientBabies[activeBabyTab].outcome_of_delivery} />
+                    <Field label={t('babyCondition')} value={patientBabies[activeBabyTab].baby_condition} />
+                    <Field label={t('babyLocation')} value={patientBabies[activeBabyTab].baby_location} />
+                  </>
+                )}
               </>
             ) : (
               <div className="col-span-3 text-sm text-slate-400 italic">{t('notYetFilled')}</div>
             )}
           </Section>
 
-          {patient.adminRemarks && (
-            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-4">
-              <p className="text-amber-800 text-sm font-semibold mb-1">Admin Remarks (Previous Return)</p>
-              <p className="text-amber-700 text-sm">{patient.adminRemarks}</p>
+          {/* Follow-up Tracker */}
+          <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-5 mb-4">
+            <FollowupTracker
+              followups={followups}
+              sepsisVisits={assessment?.sepsisVisits || []}
+              patient={patient}
+            />
+          </div>
+
+          {/* Remarks */}
+          <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-5 mb-4">
+            <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-100">
+              <MessageSquare size={16} className="text-[#0F4C75]" />
+              <h3 className="font-semibold text-slate-800">{t('remarks')}</h3>
             </div>
-          )}
+            {remarks.length > 0 && (
+              <div className="space-y-2 mb-4">
+                {remarks.map((r, i) => (
+                  <div key={i} className="bg-slate-50 rounded-lg p-3">
+                    <p className="text-sm text-slate-700">{r.remark_text}</p>
+                    <p className="text-xs text-slate-400 mt-1">{r.added_by_name} ({r.added_by_role}) · {formatDateTime(r.created_at)}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="flex gap-2">
+              <input type="text" value={newRemark} onChange={e => setNewRemark(e.target.value)} placeholder={t('addReviewNotes')} className="flex-1 px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
+              <button onClick={handleAddRemark} className="px-4 py-2 bg-[#0F4C75] text-white rounded-xl text-sm font-medium hover:bg-[#0a3254] transition-colors">Add</button>
+            </div>
+          </div>
         </div>
 
+        {/* Right Sidebar */}
         <div className="space-y-4">
+          {/* Timeline */}
           <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-5">
             <h3 className="font-semibold text-slate-800 mb-4">{t('caseTimeline')}</h3>
             <div className="space-y-3">
               {[
-                { label: t('created'), date: patient.createdAt, color: 'bg-blue-500' },
-                { label: t('submitted'), date: patient.submittedAt, color: 'bg-violet-500' },
-                { label: t('approved'), date: patient.approvedAt, color: 'bg-emerald-500' },
-              ].filter(t => t.date).map(t => (
-                <div key={t.label} className="flex items-start gap-3">
-                  <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${t.color}`}></div>
+                { label: t('created'), date: patient.created_at, color: 'bg-blue-500' },
+                { label: t('submitted'), date: patient.submitted_at || patient.submitted_again_at, color: 'bg-violet-500' },
+                { label: t('approved'), date: patient.approved_at, color: 'bg-emerald-500' },
+              ].filter(item => item.date).map(item => (
+                <div key={item.label} className="flex items-start gap-3">
+                  <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${item.color}`}></div>
                   <div>
-                    <p className="text-sm font-medium text-slate-700">{t.label}</p>
-                    <p className="text-xs text-slate-400">{formatDateTime(t.date)}</p>
+                    <p className="text-sm font-medium text-slate-700">{item.label}</p>
+                    <p className="text-xs text-slate-400">{formatDateTime(item.date)}</p>
                   </div>
                 </div>
               ))}
             </div>
           </div>
 
-          {!isLocked && currentStatus === 'submitted' && !done && (
+          {/* Admin Review Action */}
+          {!isLocked && (currentStatus === 'submitted' || currentStatus === 'submitted_again' || currentStatus === 'submitted_to_admin') && !done && (
             <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-5">
               <h3 className="font-semibold text-slate-800 mb-4">{t('adminReviewAction')}</h3>
               <div className="space-y-3 mb-4">
@@ -145,18 +246,18 @@ export default function PatientDetailAdmin() {
                 ))}
               </div>
               <div className="mb-4">
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">{t('remarks')} (optional)</label>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">{t('remarks')} ({action === 'return' ? 'Required' : 'Optional'})</label>
                 <textarea
                   rows={3}
-                  value={remarks}
-                  onChange={e => setRemarks(e.target.value)}
+                  value={reviewRemarks}
+                  onChange={e => setReviewRemarks(e.target.value)}
                   placeholder={t('addReviewNotes')}
                   className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 resize-none"
                 />
               </div>
               <button
                 onClick={handleAction}
-                disabled={!action}
+                disabled={!action || (action === 'return' && !reviewRemarks.trim())}
                 className="w-full py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-50 transition-all"
                 style={{ background: action ? 'linear-gradient(135deg,#0F4C75,#0D9488)' : '#94a3b8' }}
               >

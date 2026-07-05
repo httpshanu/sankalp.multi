@@ -1,16 +1,18 @@
-import { Fragment, useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AppLayout from '../../components/layout/AppLayout';
 import StatusBadge from '../../components/patient/StatusBadge';
 import { useLanguage } from '../../context/useLanguage';
 import { useAuth } from '../../context/useAuth';
-import { getPatientsBySupervisor, getBabiesByPatient, getFollowupsByPatient, addRemark, getCallStatusColor } from '../../data/dataStore';
-import { formatDate, canEdit } from '../../lib/utils';
-import { Search, Plus, Eye, Edit, Phone, MessageSquare, Download, History, ChevronDown, ChevronUp } from 'lucide-react';
+import {
+  getPatientsByCounsellor, getBabiesByPatient, getFollowupsByPatient,
+  addRemark, getCallStatusColor
+} from '../../data/dataStore';
+import { Search, Plus, Eye, Edit, Phone, MessageSquare, ChevronDown } from 'lucide-react';
 
 const STATUS_KEYS = ['all', 'draft', 'submitted', 'returned', 'approved', 'closed'];
 
-export default function PatientRegistry() {
+export default function CounsellorRegistry() {
   const navigate = useNavigate();
   const { t } = useLanguage();
   const { user } = useAuth();
@@ -22,7 +24,7 @@ export default function PatientRegistry() {
 
   useEffect(() => {
     if (user?.id) {
-      setPatients(getPatientsBySupervisor(user.id));
+      setPatients(getPatientsByCounsellor(user.id));
     }
   }, [user]);
 
@@ -44,7 +46,7 @@ export default function PatientRegistry() {
     addRemark({
       patient_id: patientId,
       remark_text: text,
-      remark_type: 'supervisor',
+      remark_type: 'counsellor',
       added_by_user_id: user?.id,
       added_by_name: user?.name,
       added_by_role: user?.role,
@@ -73,11 +75,11 @@ export default function PatientRegistry() {
     <AppLayout title={t('patientRegistry')}>
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
         <div>
-          <h1 className="text-xl font-bold text-slate-800">{t('myPatientRecords')}</h1>
+          <h1 className="text-xl font-bold text-slate-800">{t('myRegistrations')}</h1>
           <p className="text-slate-500 text-sm mt-1">{filtered.length} {t('recordsFound')}</p>
         </div>
         <button
-          onClick={() => navigate('/supervisor/patients/new')}
+          onClick={() => navigate('/counsellor/patients/new')}
           className="flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-semibold text-white transition-all hover:opacity-90"
           style={{ background: 'linear-gradient(135deg,#0F4C75,#1B6CA8)' }}
         >
@@ -93,7 +95,7 @@ export default function PatientRegistry() {
             <input
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Search by name, ID, mobile, father, village..."
+              placeholder={t('searchByNameUhid')}
               className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
             />
           </div>
@@ -140,9 +142,9 @@ export default function PatientRegistry() {
               ) : filtered.map(p => {
                 const isExpanded = expandedRow === p.id;
                 const babyCount = p.baby_count || 1;
-                const isExpandable = true; // All rows are expandable
+                const isExpandable = true;
                 return (
-                  <Fragment key={p.id}>
+                  <>
                     {/* Main row */}
                     <tr
                       key={p.id}
@@ -176,7 +178,7 @@ export default function PatientRegistry() {
                         <div className="flex items-center gap-1">
                           {canEdit(p.status) && (
                             <button
-                              onClick={() => navigate(`/supervisor/patients/${p.id}/edit`)}
+                              onClick={() => navigate(`/counsellor/patients/${p.id}/edit`)}
                               className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
                               title="Edit"
                             >
@@ -185,7 +187,7 @@ export default function PatientRegistry() {
                           )}
                           {!canEdit(p.status) && (
                             <button
-                              onClick={() => navigate(`/supervisor/patients/${p.id}`)}
+                              onClick={() => navigate(`/counsellor/patients/${p.id}`)}
                               className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
                               title="View"
                             >
@@ -252,7 +254,9 @@ export default function PatientRegistry() {
                                 </div>
                                 <div>
                                   <p className="text-sm font-medium text-slate-700">{t('contactVerificationStatus')}:</p>
-                                  <p className="text-sm text-slate-600">{p.contact_verification_status === 'verified' ? t('verified') : t('not_verified')}</p>
+                                  <p className="text-sm text-slate-600">
+                                    {p.contact_verification_status === 'verified' ? t('verified') : t('not_verified')}
+                                  </p>
                                 </div>
                               </div>
 
@@ -304,7 +308,9 @@ export default function PatientRegistry() {
                                 </div>
                                 <div>
                                   <p className="text-sm font-medium text-slate-700">{t('wasMotherHRP')}:</p>
-                                  <p className="text-sm text-slate-600">{p.hrp_status === 'yes' ? t('yes') : t('no')}</p>
+                                  <p className="text-sm text-slate-600">
+                                    {p.hrp_status === 'yes' ? t('yes') : t('no')}
+                                  </p>
                                 </div>
                                 {p.hrp_status === 'yes' && (
                                   <div className="col-span-2">
@@ -361,9 +367,9 @@ export default function PatientRegistry() {
                             </div>
                           </div>
                         </td>
-                      </tr>
+                        </tr>
                     )}
-                  </Fragment>
+                  </>
                 );
               })}
             </tbody>
